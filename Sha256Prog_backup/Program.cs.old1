@@ -1,0 +1,277 @@
+﻿// See https://aka.ms/new-console-template for more information
+using Sha256Prog;
+using System.Collections;
+using System.Text;
+
+Console.WriteLine("Hello, World!");
+
+//ConstantGenerator.DevelopmentInit();
+
+
+string[] hashValues = ConstantGenerator.generateConstants(8, RootMode.Square);
+string[] roundConstants = ConstantGenerator.generateConstants(64, RootMode.Cube);
+
+Console.WriteLine("Please input string to hash");
+string tohash = Console.ReadLine();
+SHA256Encrypt(tohash);
+
+//Console.WriteLine(StringToBinary(tohash));
+
+static void SHA256Encrypt(string input)
+{
+    Byte[] bytes = Encoding.UTF8.GetBytes(input);
+
+    long bitlength = bytes.Length * 8;
+    //Console.WriteLine(bitlength);
+
+    bytes = bytes.Append((byte)0x80).ToArray(); // append 1 (and 7x 0)
+
+    while ((bytes.Length + (64 / 8)) % (512 / 8) > 0)
+    {
+        bytes = bytes.Append((byte)0x00).ToArray();
+    }
+
+    Byte[] byteLength = BitConverter.GetBytes(bitlength); // check here if shit dont work, ved ikke om jeg laver big endian rigtigt.
+    //Console.WriteLine(BinaryToString(byteLength));
+    for (int i = 0; i < (64 / 8); i++)
+    {
+        bytes = bytes.Append(byteLength[byteLength.Length - 1 - i]).ToArray();
+    }
+
+    //Console.WriteLine(BinaryToString(bytes));
+
+    // skal lave ting så den looper for hver 512 bit chunk
+
+    BitArray[] Array32 = new BitArray[64];
+    for (int i = 0; i < (512 / 32); i++)
+    {
+        BitArray bit32 = new BitArray(32);
+        for (int a = 0; a < 4; a++)
+        {
+            byte curbyte = bytes[i * 4 + a];
+            BitArray bit8 = new BitArray(new byte[] { curbyte });
+
+            for (int b = 0; b < 8; b++)
+            {
+                bit32.Set(a * 8 + b, bit8[8 - b - 1]);
+            }
+        }
+        Array32[i] = bit32;
+    }
+    BitArray blankbit32 = new BitArray(32);
+    for (int i = 0; i < 32; i++)
+    {
+        blankbit32[i] = false; // false = 0, true = 1
+    }
+    for (int i = 0; i < 64 - 16; i++) // create 48 blank 32x 0s
+    {
+        Array32[i + 16] = blankbit32;
+    }
+
+
+    //Console.WriteLine(BitArrayToString(Array32));
+
+    //Console.WriteLine(BitsToString(rightshift(Array32[1], 3)));
+
+    /*var s0_1 = rightrotate(Array32[1], 7);
+    var s0_2 = rightrotate(Array32[1], 18);
+    var s0_3 = rightshift(Array32[1], 3);
+
+    var s0 = XOR(XOR(s0_1, s0_2), s0_3);
+    Console.WriteLine(BitsToString(s0));
+
+
+    var s1_1 = rightrotate(Array32[14], 17);
+    var s1_2 = rightrotate(Array32[14], 19);
+    var s1_3 = rightshift(Array32[14], 10);
+
+    var s1 = XOR(XOR(s1_1, s1_2), s1_3);
+    Console.WriteLine(BitsToString(s1));
+
+    var added = AddBits(AddBits(AddBits(Array32[0], s0), Array32[9]), s1);
+
+    Console.WriteLine(BitsToString(added));*/
+
+    Console.WriteLine(BitArrayToString(Array32));
+    Console.WriteLine("after");
+
+    BitArray[] Array32_new = new BitArray[64];
+
+    for (int i = 0; i < 16; i++)
+    {
+        Array32_new[i] = Array32[i];
+    }
+
+    for (int i = 16; i < 64; i++)
+    {
+        //Console.WriteLine("i is " + i);
+        var s0_1 = rightrotate(Array32[i - 15], 7);
+        var s0_2 = rightrotate(Array32[i - 15], 18);
+        var s0_3 = rightshift(Array32[i - 15], 3);
+
+        var s0 = XOR(XOR(s0_1, s0_2), s0_3);
+        //Console.WriteLine(BitsToString(s0));
+
+
+        var s1_1 = rightrotate(Array32[i - 2], 17);
+        var s1_2 = rightrotate(Array32[i - 2], 19);
+        var s1_3 = rightshift(Array32[i - 2], 10);
+
+        var s1 = XOR(XOR(s1_1, s1_2), s1_3);
+        //Console.WriteLine(BitsToString(s1));
+
+        BitArray added = AddBits(AddBits(AddBits(Array32[i-16], s0), Array32[i-7]), s1);
+
+        Console.WriteLine("Setting array index of " + i + " to: " + BitsToString(added));
+
+        Array32.SetValue(added, i);
+
+        //Console.WriteLine(BitArrayToString(Array32));
+        //Console.ReadLine();
+    }
+
+    Console.WriteLine(BitArrayToString(Array32));
+}
+
+static BitArray AddBits(BitArray arr1, BitArray arr2) // if number overflows, remove last 1
+{
+    BitArray temparr1 = new BitArray(arr1);
+    BitArray overlapbits = new BitArray(temparr1.Length);
+    overlapbits.Set(temparr1.Length-1, false);
+    bool overlap = false;
+
+    for (int i = 0; i < temparr1.Length; i++)
+    {
+        int index = temparr1.Length - i - 1;
+        
+        
+        if (temparr1[index] == true && arr2[index] == true)
+        {
+            // overlap plus
+            temparr1.Set(index, false);
+            if (index > 0)
+            {
+                overlapbits.Set(index - 1, true);
+
+                overlap = true;
+            }
+            //Console.WriteLine("overlap1");
+            
+        } else if (temparr1[index] == false && arr2[index] == false)
+        {
+            // dont plus
+            temparr1.Set(index, false);
+            if (index > 0)
+                overlapbits.Set(index - 1, false);
+
+        } else if (temparr1[index] == true && arr2[index] == false || temparr1[index] == false && arr2[index] == true)
+        {
+            // plus
+            temparr1.Set(index, true);
+            if (index > 0)
+                overlapbits.Set(index - 1, false);
+        } else
+        {
+            throw new Exception("How did be end up here?");
+        }
+    }
+
+    if (overlap)
+    {
+        //Console.WriteLine("overlap: " + BitsToString(overlapbits));
+        temparr1 = AddBits(temparr1, overlapbits);
+    }
+
+    return temparr1;
+}
+
+static BitArray XOR(BitArray arr1, BitArray arr2)
+{
+    if (arr1.Length != arr2.Length)
+    {
+        throw new Exception("Lengths of array dont match");
+    }
+    BitArray tempbits = new BitArray(arr1.Length);
+
+    for (int i = 0; i < arr1.Length; i++)
+    {
+        if (arr1[i] != arr2[i])
+        {
+            tempbits.Set(i, true);
+        }
+        else
+        {
+            tempbits.Set(i, false);
+        }
+    }
+    return tempbits;
+}
+
+static BitArray rightshift(BitArray bits, int amount)
+{
+    BitArray tempbits = new BitArray(bits.Length);
+
+    for (int i = 0; i < amount; i++)
+    {
+        tempbits.Set(i, false);
+    }
+
+    for (int i = 0; i < bits.Length - amount; i++)
+    {
+        tempbits.Set(i + amount, bits[i]);
+    }
+
+    return tempbits;
+}
+
+static BitArray rightrotate(BitArray bits, int amount)
+{
+    BitArray tempbits = new BitArray(bits.Length);
+
+    for (int i = 0; i < amount; i++)
+    {
+        tempbits.Set(i, bits[bits.Length - amount + i]);
+    }
+
+    for (int i = 0; i < bits.Length - amount; i++)
+    {
+        tempbits.Set(i + amount, bits[i]);
+    }
+
+    return tempbits;
+}
+
+static string BitArrayToString(BitArray[] bits)
+{
+    string temp = "";
+    for (int a = 0; a < bits.Length; a++)
+    {
+        for (int i = 0; i < bits[a].Length; i++)
+        {
+            temp += Convert.ToInt32(bits[a].Get(i));
+        }
+        temp += " ";
+    }
+    return temp;
+}
+
+static string BitsToString(BitArray bits)
+{
+    string temp = "";
+    for (int i = 0; i < bits.Length; i++)
+    {
+        temp += Convert.ToInt32(bits.Get(i));
+    }
+    return temp;
+}
+
+static string StringToBinary(string textString)
+{
+    Byte[] data = Encoding.UTF8.GetBytes(textString);
+    return string.Join(" ", data.Select(byt => Convert.ToString(byt, 2).PadLeft(8, '0')));
+}
+
+static string BinaryToString(Byte[] input)
+{
+    return string.Join(" ", input.Select(byt => Convert.ToString(byt, 2).PadLeft(8, '0')));
+}
